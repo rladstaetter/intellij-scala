@@ -26,7 +26,8 @@ import org.jetbrains.plugins.scala.lang.refactoring.util.{DialogConflictsReporte
 class ScalaIntroduceVariableHandler extends ScalaRefactoringActionHandler with DialogConflictsReporter with IntroduceExpressions with IntroduceTypeAlias {
   var occurrenceHighlighters = Seq.empty[RangeHighlighter]
 
-  override def invoke(file: PsiFile)(implicit project: Project, editor: Editor, dataContext: DataContext): Unit = {
+  override def invoke(file: PsiFile)
+                     (implicit project: Project, editor: Editor, dataContext: DataContext): Unit = {
     val offset = editor.getCaretModel.getOffset
 
     implicit val selectionModel: SelectionModel = editor.getSelectionModel
@@ -34,7 +35,7 @@ class ScalaIntroduceVariableHandler extends ScalaRefactoringActionHandler with D
 
     def hasSelection = selectionModel.hasSelection
 
-    ScalaRefactoringUtil.trimSpacesAndComments(editor, file)
+    trimSpacesAndComments(editor, file)
 
     val selectedElement: Option[PsiElement] = findSelectedTypeElement.orElse(findSelectedExpression)
 
@@ -71,23 +72,23 @@ class ScalaIntroduceVariableHandler extends ScalaRefactoringActionHandler with D
       editor.putUserData(IntroduceTypeAlias.REVERT_TYPE_ALIAS_INFO, new IntroduceTypeAliasData())
     }
 
-    val typeElement = selectedElement match {
-      case Some(te: ScTypeElement) =>
-        Option(te)
+    val maybeTypeElement = selectedElement match {
+      case Some(te: ScTypeElement) => Option(te)
       case _ => getTypeElementAtOffset
     }
 
-    if (typeElement.isDefined) {
+    if (maybeTypeElement.isDefined) {
+      val typeElement = maybeTypeElement.get
       if (editor.getUserData(IntroduceTypeAlias.REVERT_TYPE_ALIAS_INFO).isData) {
-        invokeTypeElement(project, editor, file, typeElement.get)
+        invokeOnTypeElement(typeElement)
       } else {
-        afterTypeElementChoosing(project, editor, file, dataContext, typeElement.get, INTRODUCE_TYPEALIAS_REFACTORING_NAME) {
-          invokeTypeElement(project, editor, file, _)
+        afterTypeElementChoosing(project, editor, file, dataContext, typeElement, INTRODUCE_TYPEALIAS_REFACTORING_NAME) {
+          invokeOnTypeElement
         }
       }
     } else {
       afterExpressionChoosing(project, editor, file, dataContext, INTRODUCE_VARIABLE_REFACTORING_NAME, checkCanBeIntroduced(_)) {
-        invokeOnSelection
+        invokeOnSelection(file)
       }
     }
   }

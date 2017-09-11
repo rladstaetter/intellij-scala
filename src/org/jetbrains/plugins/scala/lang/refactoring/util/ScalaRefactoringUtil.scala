@@ -221,7 +221,7 @@ object ScalaRefactoringUtil {
       expr match {
         case Some(expression: ScInfixExpr) =>
           val op1 = expression.operation
-          if (ScalaRefactoringUtil.ensureFileWritable(project, file)) {
+          if (ensureFileIsWritable(file)(project)) {
             var res: Option[(ScExpression, Array[ScType])] = None
             inWriteCommandAction(project) {
               val document = editor.getDocument
@@ -315,10 +315,10 @@ object ScalaRefactoringUtil {
     }
   }
 
-  def ensureFileWritable(project: Project, file: PsiFile): Boolean = {
+  def ensureFileIsWritable(file: PsiFile)
+                          (implicit project: Project): Boolean = {
     val virtualFile = file.getVirtualFile
-    val readonlyStatusHandler = ReadonlyStatusHandler.getInstance(project)
-    val operationStatus = readonlyStatusHandler.ensureFilesWritable(virtualFile)
+    val operationStatus = ReadonlyStatusHandler.getInstance(project).ensureFilesWritable(virtualFile)
     !operationStatus.hasReadonlyFiles
   }
 
@@ -851,24 +851,24 @@ object ScalaRefactoringUtil {
     literalPattern != null && literalPattern.getTextRange == textRange
   }
 
-  /**
-    * @throws IntroduceException
-    */
-  def showErrorMessageWithException(text: String, project: Project, editor: Editor, refactoringName: String): Nothing = {
-    CommonRefactoringUtil.showErrorHint(project, editor, text, refactoringName, null)
+  def showErrorMessageWithException(text: String, refactoringName: String)
+                                   (implicit project: Project, editor: Editor): Nothing = {
+    showErrorHint(text, refactoringName)
     throw new IntroduceException
   }
 
-  def showErrorHint(text: String, project: Project, editor: Editor, refactoringName: String): Unit = {
+  def showErrorHint(text: String, refactoringName: String)
+                   (implicit project: Project, editor: Editor): Unit = {
     CommonRefactoringUtil.showErrorHint(project, editor, text, refactoringName, null)
   }
 
-  def checkFile(file: PsiFile, project: Project, editor: Editor, refactoringName: String) {
-    if (!file.isInstanceOf[ScalaFile])
-      showErrorMessageWithException(ScalaBundle.message("only.for.scala"), project, editor, refactoringName)
-
-    if (!ScalaRefactoringUtil.ensureFileWritable(project, file))
-      showErrorMessageWithException(ScalaBundle.message("file.is.not.writable"), project, editor, refactoringName)
+  def checkFile(file: PsiFile, refactoringName: String)
+               (implicit project: Project, editor: Editor): ScalaFile = file match {
+    case scalaFile: ScalaFile if ensureFileIsWritable(scalaFile) => scalaFile
+    case _: ScalaFile =>
+      showErrorMessageWithException(ScalaBundle.message("file.is.not.writable"), refactoringName)
+    case _ =>
+      showErrorMessageWithException(ScalaBundle.message("only.for.scala"), refactoringName)
   }
 
   def checkCanBeIntroduced(expr: ScExpression, action: (String) => Unit = _ => {}): Boolean = {
@@ -1119,7 +1119,8 @@ object ScalaRefactoringUtil {
     elements
   }
 
-  def showNotPossibleWarnings(elements: Seq[PsiElement], project: Project, editor: Editor, refactoringName: String): Boolean = {
+  def showNotPossibleWarnings(elements: Seq[PsiElement], refactoringName: String)
+                             (implicit project: Project, editor: Editor): Boolean = {
     def errors(elem: PsiElement): Option[String] = elem match {
       case funDef: ScFunctionDefinition if hasOutsideUsages(funDef) => ScalaBundle.message("cannot.extract.used.function.definition").toOption
       case _: ScBlockStatement => None
@@ -1146,12 +1147,12 @@ object ScalaRefactoringUtil {
 
     val messages = elements.flatMap(errors).distinct
     if (messages.nonEmpty) {
-      showErrorHint(messages.mkString("\n"), project, editor, refactoringName)
+      showErrorHint(messages.mkString("\n"), refactoringName)
       return true
     }
 
     if (elements.isEmpty || !elements.exists(_.isInstanceOf[ScBlockStatement])) {
-      showErrorHint(ScalaBundle.message("cannot.extract.empty.message"), project, editor, refactoringName)
+      showErrorHint(ScalaBundle.message("cannot.extract.empty.message"), refactoringName)
       return true
     }
 

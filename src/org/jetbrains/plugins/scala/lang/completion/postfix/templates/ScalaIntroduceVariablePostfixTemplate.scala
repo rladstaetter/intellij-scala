@@ -18,6 +18,7 @@ class ScalaIntroduceVariablePostfixTemplate extends PostfixTemplateWithExpressio
     val range = expression.getTextRange
     editor.getSelectionModel.setSelection(range.getStartOffset, range.getEndOffset)
 
-    new ScalaIntroduceVariableHandler().invokeOnSelection(expression.getProject, editor, expression.getContainingFile)
+    new ScalaIntroduceVariableHandler()
+      .invokeOnSelection(expression.getContainingFile)(expression.getProject, editor)
   }
 }

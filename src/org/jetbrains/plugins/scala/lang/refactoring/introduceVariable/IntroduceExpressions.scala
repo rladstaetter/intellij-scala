@@ -39,7 +39,8 @@ trait IntroduceExpressions {
 
   val INTRODUCE_VARIABLE_REFACTORING_NAME = ScalaBundle.message("introduce.variable.title")
 
-  def invokeOnSelection(implicit project: Project, editor: Editor, file: PsiFile): Unit = {
+  def invokeOnSelection(file: PsiFile)
+                       (implicit project: Project, editor: Editor): Unit = {
     try {
       implicit val selectionModel: SelectionModel = editor.getSelectionModel
       val startOffset = selectionModel.getSelectionStart
@@ -48,11 +49,12 @@ trait IntroduceExpressions {
       UsageTrigger.trigger(ScalaBundle.message("introduce.variable.id"))
 
       PsiDocumentManager.getInstance(project).commitAllDocuments()
-      ScalaRefactoringUtil.checkFile(file, project, editor, INTRODUCE_VARIABLE_REFACTORING_NAME)
-      val (expr: ScExpression, types: Array[ScType]) = ScalaRefactoringUtil.getExpression(project, editor, file, startOffset, endOffset).
-        getOrElse(showErrorMessageWithException(ScalaBundle.message("cannot.refactor.not.expression"), project, editor, INTRODUCE_VARIABLE_REFACTORING_NAME))
+      val scalaFile = checkFile(file, INTRODUCE_VARIABLE_REFACTORING_NAME)
 
-      ScalaRefactoringUtil.checkCanBeIntroduced(expr, showErrorMessageWithException(_, project, editor, INTRODUCE_VARIABLE_REFACTORING_NAME))
+      val (expr: ScExpression, types: Array[ScType]) = getExpression(project, editor, scalaFile, startOffset, endOffset).
+        getOrElse(showErrorMessageWithException(ScalaBundle.message("cannot.refactor.not.expression"), INTRODUCE_VARIABLE_REFACTORING_NAME))
+
+      checkCanBeIntroduced(expr, showErrorMessageWithException(_, INTRODUCE_VARIABLE_REFACTORING_NAME))
 
       val occurrences: Array[TextRange] = getOccurrenceRanges(unparExpr(expr), fileEncloser(file))
       implicit val validator: ScalaVariableValidator = ScalaVariableValidator(file, expr, occurrences)

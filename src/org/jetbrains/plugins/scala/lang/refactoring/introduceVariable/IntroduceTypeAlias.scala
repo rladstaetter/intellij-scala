@@ -43,15 +43,16 @@ trait IntroduceTypeAlias {
 
   val INTRODUCE_TYPEALIAS_REFACTORING_NAME = ScalaBundle.message("introduce.type.alias.title")
 
-  def invokeTypeElement(project: Project, editor: Editor, file: PsiFile, inTypeElement: ScTypeElement): Unit = {
+  def invokeOnTypeElement(inTypeElement: ScTypeElement)
+                         (implicit project: Project, editor: Editor, file: PsiFile): Unit = {
     try {
       UsageTrigger.trigger(ScalaBundle.message("introduce.type.alias.id"))
 
       PsiDocumentManager.getInstance(project).commitAllDocuments()
-      ScalaRefactoringUtil.checkFile(file, project, editor, INTRODUCE_TYPEALIAS_REFACTORING_NAME)
+      checkFile(file, INTRODUCE_TYPEALIAS_REFACTORING_NAME)
 
       val typeElement: ScTypeElement = Option(inTypeElement).filter(checkTypeElement)
-        .getOrElse(showErrorMessageWithException(ScalaBundle.message("cannot.refactor.not.valid.type"), project, editor, INTRODUCE_TYPEALIAS_REFACTORING_NAME))
+        .getOrElse(showErrorMessageWithException(ScalaBundle.message("cannot.refactor.not.valid.type"), INTRODUCE_TYPEALIAS_REFACTORING_NAME))
 
       val currentDataObject = editor.getUserData(IntroduceTypeAlias.REVERT_TYPE_ALIAS_INFO)
 
@@ -60,9 +61,8 @@ trait IntroduceTypeAlias {
       }
 
       if (currentDataObject.possibleScopes.isEmpty) {
-        showErrorMessageWithException(ScalaBundle.message("cannot.refactor.scope.not.found"), project, editor, INTRODUCE_TYPEALIAS_REFACTORING_NAME)
+        showErrorMessageWithException(ScalaBundle.message("cannot.refactor.scope.not.found"), INTRODUCE_TYPEALIAS_REFACTORING_NAME)
       }
-
 
       def runWithDialog(fromInplace: Boolean, mainScope: ScopeItem, enteredName: String = "") {
         val typeElementHelper = if (fromInplace && mainScope.isInstanceOf[SimpleScopeItem]) {

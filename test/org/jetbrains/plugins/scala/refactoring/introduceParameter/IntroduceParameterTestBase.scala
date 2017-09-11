@@ -79,7 +79,7 @@ abstract class IntroduceParameterTestBase extends ScalaLightPlatformCodeInsightT
             ScalaRefactoringUtil.trimSpacesAndComments(editor, scalaFile)
             PsiDocumentManager.getInstance(project).commitAllDocuments()
             val handler = new ScalaIntroduceParameterHandler()
-            val (exprWithTypes, elems) = handler.selectedElements(scalaFile, project, editor) match {
+            val (exprWithTypes, elems) = handler.selectedElements(scalaFile)(project, editor) match {
               case Some((x, y)) => (x, y)
               case None => return
             }
