@@ -1,6 +1,7 @@
 package org.jetbrains.plugins.scala.refactoring.introduceVariable;
 
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.SelectionModel;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
 import com.intellij.openapi.project.Project;
@@ -127,7 +128,8 @@ abstract public class AbstractIntroduceVariableTestBase extends ActionTestBase {
     assert myEditor != null;
 
     try {
-      myEditor.getSelectionModel().setSelection(startOffset, endOffset);
+      SelectionModel selectionModel = myEditor.getSelectionModel();
+      selectionModel.setSelection(startOffset, endOffset);
 
       // gathering data for introduce variable
       ScalaIntroduceVariableHandler introduceVariableHandler = new ScalaIntroduceVariableHandler();
@@ -155,7 +157,7 @@ abstract public class AbstractIntroduceVariableTestBase extends ActionTestBase {
 
         result = myEditor.getDocument().getText();
       } else if (element instanceof ScTypeElement){
-        Option<ScTypeElement> optionType = ScalaRefactoringUtil.getTypeElement(project, myEditor, myFile, startOffset, endOffset);
+        Option<ScTypeElement> optionType = ScalaRefactoringUtil.findSelectedTypeElement(selectionModel, myFile);
         if (optionType.isEmpty()){
           result = "Selected block should be presented as type element";
         } else {

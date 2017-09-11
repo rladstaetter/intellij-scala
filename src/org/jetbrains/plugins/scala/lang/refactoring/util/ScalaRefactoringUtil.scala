@@ -14,7 +14,7 @@ import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.colors.{EditorColors, EditorColorsManager}
 import com.intellij.openapi.editor.markup.{HighlighterLayer, HighlighterTargetArea, RangeHighlighter, TextAttributes}
-import com.intellij.openapi.editor.{Editor, RangeMarker, VisualPosition}
+import com.intellij.openapi.editor.{Editor, RangeMarker, SelectionModel, VisualPosition}
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.{JBPopupAdapter, JBPopupFactory, LightweightWindowEvent}
 import com.intellij.openapi.util.TextRange
@@ -23,9 +23,11 @@ import com.intellij.psi._
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.search.{GlobalSearchScope, LocalSearchScope}
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.psi.util.PsiTreeUtil.findElementOfClassAtRange
 import com.intellij.refactoring.util.CommonRefactoringUtil
 import org.jetbrains.plugins.scala.extensions._
 import org.jetbrains.plugins.scala.lang.lexer.ScalaTokenTypes
+import org.jetbrains.plugins.scala.lang.psi.ScalaPsiUtil.getParentOfType
 import org.jetbrains.plugins.scala.lang.psi.api.base.patterns.{ScCaseClause, ScLiteralPattern, ScPattern, ScReferencePattern}
 import org.jetbrains.plugins.scala.lang.psi.api.base.types._
 import org.jetbrains.plugins.scala.lang.psi.api.base.{ScInterpolatedStringLiteral, ScLiteral, ScStableCodeReferenceElement}
@@ -57,9 +59,9 @@ import scala.collection.mutable.ArrayBuffer
 
 
 /**
- * User: Alexander Podkhalyuzin
- * Date: 23.06.2008
- */
+  * User: Alexander Podkhalyuzin
+  * Date: 23.06.2008
+  */
 
 object ScalaRefactoringUtil {
   def trimSpacesAndComments(editor: Editor, file: PsiFile, trimComments: Boolean = true) {
@@ -138,17 +140,19 @@ object ScalaRefactoringUtil {
     PsiTreeUtil.getParentOfType(typeElement, classOf[ScTemplateParents]) != null
   }
 
-  def checkTypeElement(element: ScTypeElement): Option[ScTypeElement] = {
-    Option(element).filter {
-      case e if e.getNextSiblingNotWhitespace.isInstanceOf[ScTypeArgs] => false
+  def checkTypeElement(typeElement: ScTypeElement): Boolean =
+    typeElement.getNextSiblingNotWhitespace match {
+      case _: ScTypeArgs => false
       case _ => true
     }
-  }
 
-  def getTypeElement(project: Project, editor: Editor, file: PsiFile, startOffset: Int, endOffset: Int): Option[ScTypeElement] = {
-    val element = PsiTreeUtil.findElementOfClassAtRange(file, startOffset, endOffset, classOf[ScTypeElement])
+  def findSelectedTypeElement(implicit selectionModel: SelectionModel, file: PsiFile): Option[ScTypeElement] = {
+    val startOffset = selectionModel.getSelectionStart
+    val endOffset = selectionModel.getSelectionEnd
 
-    Option(element).filter(_.getTextRange.getEndOffset == endOffset).flatMap(checkTypeElement)
+    Option(findElementOfClassAtRange(file, startOffset, endOffset, classOf[ScTypeElement]))
+      .filter(_.getTextRange.getEndOffset == endOffset)
+      .filter(checkTypeElement)
   }
 
   def getOwner(typeElement: PsiElement): ScTypeParametersOwner = PsiTreeUtil.getParentOfType(typeElement, classOf[ScTypeParametersOwner], true)
@@ -200,6 +204,11 @@ object ScalaRefactoringUtil {
   def getMinOwner(ownres: Array[ScTypeParametersOwner], currentFile: PsiFile): PsiElement = {
     val filtered = ownres.filter((value: ScTypeParametersOwner) => value.getContainingFile == currentFile)
     PsiTreeUtil.findCommonParent(filtered: _*)
+  }
+
+  def findSelectedExpression(implicit project: Project, editor: Editor, file: PsiFile): Option[ScExpression] = {
+    val selectionModel = editor.getSelectionModel
+    getExpression(project, editor, file, selectionModel.getSelectionStart, selectionModel.getSelectionEnd).map(_._1)
   }
 
   def getExpression(project: Project, editor: Editor, file: PsiFile, startOffset: Int, endOffset: Int): Option[(ScExpression, Array[ScType])] = {
@@ -265,7 +274,7 @@ object ScalaRefactoringUtil {
       }
     }
 
-    val element = PsiTreeUtil.findElementOfClassAtRange(file, startOffset, endOffset, classOf[ScExpression])
+    val element = findElementOfClassAtRange(file, startOffset, endOffset, classOf[ScExpression])
 
     if (element == null || element.getTextRange.getEndOffset != endOffset) {
       return selectedInfixExpr() orElse partOfStringLiteral()
@@ -291,7 +300,9 @@ object ScalaRefactoringUtil {
 
   def expressionToIntroduce(expr: ScExpression): ScExpression = {
     def copyExpr = expr.copy.asInstanceOf[ScExpression]
+
     def liftMethod = createExpressionFromText(expr.getText + " _")(expr.getManager)
+
     expr match {
       case ref: ScReferenceExpression =>
         ref.resolve() match {
@@ -329,6 +340,7 @@ object ScalaRefactoringUtil {
         }
       }
     }
+
     def getTextOccurrenceInLiterals(text: String, enclosingContainer: PsiElement, filter: ScLiteral => Boolean): Array[TextRange] = {
       val result = ArrayBuffer[TextRange]()
       for (child <- enclosingContainer.getChildren) {
@@ -341,6 +353,7 @@ object ScalaRefactoringUtil {
       }
       result.toArray
     }
+
     element match {
       case intrp: ScInterpolatedStringLiteral =>
         val prefix = intrp.reference.fold("")(_.refName)
@@ -732,10 +745,12 @@ object ScalaRefactoringUtil {
         case p => p
       }
       val expressions = getExpressions(element).filter(exprFilter)
+
       def chooseExpression(expr: ScExpression) {
         editor.getSelectionModel.setSelection(expr.getTextRange.getStartOffset, expr.getTextRange.getEndOffset)
         invokesNext
       }
+
       if (expressions.length == 0)
         editor.getSelectionModel.selectLineAtCaret()
       else if (expressions.length == 1) {
@@ -784,6 +799,7 @@ object ScalaRefactoringUtil {
         editor.getSelectionModel.setSelection(typeElement.getTextRange.getStartOffset, typeElement.getTextRange.getEndOffset)
         invokesNext(typeElement)
       }
+
       if (typeElement.length == 0) {
         editor.getSelectionModel.selectLineAtCaret()
       }
@@ -801,19 +817,17 @@ object ScalaRefactoringUtil {
     invokesNext(currentSelectedElement)
   }
 
-  def fileEncloser(startOffset: Int, file: PsiFile): PsiElement = {
-    if (file.asInstanceOf[ScalaFile].isScriptFile) file
-    else {
-      val elem = file.findElementAt(startOffset)
-      val result = ScalaPsiUtil.getParentOfType(elem, classOf[ScExtendsBlock], classOf[PsiFile])
-      if (result == null) {
-        for (child <- file.getChildren) {
-          val textRange: TextRange = child.getTextRange
-          if (textRange.contains(startOffset)) return child
-        }
+  def fileEncloser(file: PsiFile)
+                  (implicit selectionModel: SelectionModel): PsiElement = file match {
+    case scalaFile: ScalaFile if scalaFile.isScriptFile => scalaFile
+    case _ =>
+      val startOffset = selectionModel.getSelectionStart
+      val selectedElement = file.findElementAt(startOffset)
+      getParentOfType(selectedElement, classOf[ScExtendsBlock], classOf[PsiFile]) match {
+        case null =>
+          file.getChildren.find(_.getTextRange.contains(startOffset)).orNull
+        case parent => parent
       }
-      result
-    }
   }
 
   def isInplaceAvailable(editor: Editor): Boolean =
@@ -821,8 +835,8 @@ object ScalaRefactoringUtil {
 
   def enclosingContainer(parent: PsiElement): PsiElement = {
     Option(parent)
-            .map(elem => elem.firstChild.getOrElse(elem)) //to make enclosing container non-strict
-            .flatMap(_.scopes.toStream.headOption).orNull
+      .map(elem => elem.firstChild.getOrElse(elem)) //to make enclosing container non-strict
+      .flatMap(_.scopes.toStream.headOption).orNull
   }
 
   def commonParent(file: PsiFile, textRanges: TextRange*): PsiElement = {
@@ -838,8 +852,8 @@ object ScalaRefactoringUtil {
   }
 
   /**
-   * @throws IntroduceException
-   */
+    * @throws IntroduceException
+    */
   def showErrorMessageWithException(text: String, project: Project, editor: Editor, refactoringName: String): Nothing = {
     CommonRefactoringUtil.showErrorHint(project, editor, text, refactoringName, null)
     throw new IntroduceException
@@ -956,7 +970,7 @@ object ScalaRefactoringUtil {
     documentManager.commitDocument(document)
     val newStart = start + shift
     val newEnd = newStart + newString.length
-    val newExpr = PsiTreeUtil.findElementOfClassAtRange(file, newStart, newEnd, classOf[ScExpression])
+    val newExpr = findElementOfClassAtRange(file, newStart, newEnd, classOf[ScExpression])
     val newPattern = PsiTreeUtil.findElementOfClassAtOffset(file, newStart, classOf[ScPattern], true)
     Option(newExpr).orElse(Option(newPattern))
       .map(elem => document.createRangeMarker(elem.getTextRange))
@@ -992,6 +1006,7 @@ object ScalaRefactoringUtil {
       }
       result || needBraces(parExpr, nextParent)
     }
+
     val interpolated = Option(PsiTreeUtil.getParentOfType(elem, classOf[ScInterpolatedStringLiteral], false))
     val expr = interpolated getOrElse PsiTreeUtil.getParentOfType(elem, classOf[ScExpression], false)
     val nextPar = nextParent(expr, elem.getContainingFile)
